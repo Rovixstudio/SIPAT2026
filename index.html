@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#126b3a">
+  <title>SIPAT Challenge</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#"><span class="brand-mark">✚</span><span>SIPAT <b>CHALLENGE</b></span></a>
+  <nav><button class="nav-btn" data-view="home">Início</button><button class="nav-btn" data-view="ranking">Ranking</button><button class="nav-btn" data-view="admin">Administração</button></nav>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div>
+      <span class="eyebrow">CINCO DIAS • UMA GRANDE CONQUISTA</span>
+      <h1>Conhecimento que<br><em>vale pontos.</em></h1>
+      <p>Responda aos desafios, some pontos e suba no ranking da SIPAT.</p>
+      <div class="hero-pills"><span>✓ Desafio oficial diário</span><span>★ Rodadas bônus</span><span>🏆 Ranking geral</span></div>
+    </div>
+    <div class="hero-art"><div class="hero-shield">✚</div><div class="hero-star">★</div><div class="hero-caption">SEGURANÇA<br>É ATITUDE!</div></div>
+  </section>
+
+  <section id="view-home" class="view active">
+    <div class="section-heading"><div><span class="eyebrow green">ÁREA DO PARTICIPANTE</span><h2>Entre na competição</h2></div><span class="live-dot">Sistema online</span></div>
+    <div class="columns">
+      <article class="card">
+        <div id="login-panel">
+          <h3>Identifique-se</h3>
+          <p class="muted">Use o código individual fornecido pela organização.</p>
+          <label for="access-code">Código de acesso</label>
+          <input id="access-code" autocomplete="one-time-code" placeholder="Ex.: SIPAT-8K2P" maxlength="40">
+          <button id="login-btn" class="primary full">Acessar minha conta →</button>
+          <p id="login-message" class="message" aria-live="polite"></p>
+        </div>
+        <div id="participant-panel" class="hidden">
+          <div class="profile-row"><div id="my-avatar" class="avatar big">🦊</div><div><h3 id="my-name">Participante</h3><p id="my-sector" class="muted"></p></div></div>
+          <div class="stats"><div><strong id="my-points">0</strong><span>Pontos</span></div><div><strong id="my-rank">—</strong><span>Posição</span></div><div><strong id="my-attempts">0</strong><span>Respostas</span></div></div>
+          <label for="avatar-picker">Escolha seu avatar</label>
+          <div id="avatar-picker" class="avatar-grid"></div>
+          <button id="save-avatar" class="secondary full">Salvar avatar</button>
+          <div class="challenge-actions">
+            <button id="official-btn" class="primary full">Jogar desafio oficial do dia</button>
+            <button id="bonus-btn" class="secondary full">Jogar rodada bônus</button>
+          </div>
+          <p id="game-message" class="message" aria-live="polite"></p>
+        </div>
+      </article>
+      <article class="card quiz-card">
+        <div class="quiz-top"><span class="eyebrow green">SUA PRÓXIMA MISSÃO</span><span class="badge">SIPAT 5 DIAS</span></div>
+        <div id="quiz-empty" class="quiz-empty"><div class="quiz-icon">?</div><h3>Prepare-se para o desafio</h3><p class="muted">Entre com seu código para carregar uma pergunta oficial ou uma rodada bônus.</p></div>
+        <div id="quiz-area" class="hidden">
+          <div class="question-meta"><span id="question-kind" class="badge">OFICIAL</span><span id="question-points" class="muted"></span></div>
+          <h3 id="question-text"></h3>
+          <div id="answer-options" class="answer-list"></div>
+          <button id="answer-submit" class="primary full">Confirmar resposta</button>
+          <div id="answer-feedback" class="message" aria-live="polite"></div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="view-ranking" class="view">
+    <div class="section-heading"><div><span class="eyebrow green">PLACAR DA SIPAT</span><h2>Ranking geral</h2></div><button id="refresh-ranking" class="secondary">Atualizar ↻</button></div>
+    <article class="card">
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Participante</th><th>Setor</th><th>Pontos</th></tr></thead><tbody id="ranking-body"><tr><td colspan="4">Entre como participante para consultar seu resultado, ou atualize o placar público quando habilitado.</td></tr></tbody></table></div>
+      <p class="muted small">O placar público exibe apenas nome, setor, avatar e pontuação. Dados de acesso e respostas individuais ficam restritos.</p>
+    </article>
+  </section>
+
+  <section id="view-admin" class="view">
+    <div class="section-heading"><div><span class="eyebrow green">ACESSO RESTRITO</span><h2>Painel administrativo</h2></div><span class="badge private">Privado</span></div>
+    <article class="card">
+      <div id="admin-login">
+        <h3>Entrar como administrador</h3><p class="muted">Use a conta individual criada pela organização.</p>
+        <label for="admin-email">E-mail</label><input id="admin-email" type="email" autocomplete="username" placeholder="administrador@empresa.com">
+        <label for="admin-password">Senha</label><input id="admin-password" type="password" autocomplete="current-password" placeholder="Sua senha">
+        <button id="admin-login-btn" class="primary">Entrar no painel →</button><p id="admin-message" class="message"></p>
+      </div>
+      <div id="admin-panel" class="hidden">
+        <div class="admin-head"><div><h3>Central de controle</h3><p id="admin-who" class="muted"></p></div><button id="admin-logout" class="secondary">Sair</button></div>
+        <div class="stats admin-stats"><div><strong id="admin-participants">—</strong><span>Participantes</span></div><div><strong id="admin-questions">—</strong><span>Perguntas ativas</span></div><div><strong id="admin-answers">—</strong><span>Respostas</span></div></div>
+        <div class="admin-grid">
+          <div><h4>Adicionar pergunta</h4>
+            <label for="q-day">Dia</label><select id="q-day"><option value="1">Dia 1</option><option value="2">Dia 2</option><option value="3">Dia 3</option><option value="4">Dia 4</option><option value="5">Dia 5</option></select>
+            <label for="q-kind">Tipo</label><select id="q-kind"><option value="official">Oficial</option><option value="bonus">Bônus</option></select>
+            <label for="q-points">Pontos</label><input id="q-points" type="number" min="1" max="1000" value="100">
+            <label for="q-text">Pergunta</label><textarea id="q-text" rows="3" placeholder="Digite a pergunta"></textarea>
+            <div class="option-fields"><label>Alternativa A<input id="opt-0"></label><label>Alternativa B<input id="opt-1"></label><label>Alternativa C<input id="opt-2"></label><label>Alternativa D<input id="opt-3"></label></div>
+            <label for="q-correct">Resposta correta</label><select id="q-correct"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
+            <button id="add-question" class="primary full">Cadastrar pergunta</button><p id="question-message" class="message"></p>
+          </div>
+          <div><h4>Minhas perguntas</h4><p class="muted small">Cada pergunta aparece com um botão de menos (−). Ao clicar, ela sai da lista de perguntas disponíveis. Você pode cadastrar outra no formulário ao lado.</p><div id="admin-question-list" class="question-list"><p class="muted">Carregando perguntas...</p></div></div>
+          <div><h4>Ferramentas</h4>
+            <p class="muted small">O QR Code aponta para o endereço público desta aplicação. Publique o site antes de gerar e imprimir o código definitivo.</p>
+            <button id="make-qr" class="secondary full">Gerar QR Code de acesso</button><div id="qr-output"></div>
+            <hr><button id="export-ranking" class="secondary full">Exportar ranking CSV</button>
+            <p class="muted small">O cadastro/importação dos funcionários e o gerenciamento de administradores são feitos com permissões no banco de dados, conforme o manual.</p>
+          </div>
+        </div>
+        <div class="admin-table"><h4>Últimas respostas</h4><div class="table-wrap"><table><thead><tr><th>Participante</th><th>Dia</th><th>Tipo</th><th>Resultado</th><th>Pontos</th></tr></thead><tbody id="admin-attempts"></tbody></table></div></div>
+      </div>
+    </article>
+  </section>
+</main>
+<footer>SIPAT CHALLENGE • CONHECIMENTO, PREVENÇÃO E ATITUDE</footer>
+<div id="toast" class="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
