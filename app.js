@@ -161,8 +161,17 @@ async function loadQuestion(kind) {
   $('answer-feedback').textContent = ''; $('answer-submit').disabled = true;
   const { data, error } = await db.rpc('participant_next_question', { p_access_code: accessToken, p_kind: kind });
   if (error) { $('question-text').textContent = 'Não foi possível carregar a pergunta.'; message('answer-feedback', error.message, true); return; }
+  if (data?.status === 'disabled') {
+    $('question-text').textContent = kind === 'official' ? 'O desafio oficial está temporariamente desativado pela organização.' : 'A rodada bônus ainda não foi liberada pela organização.';
+    $('question-kind').textContent = kind === 'official' ? 'OFICIAL' : 'BÔNUS';
+    $('question-points').textContent = '';
+    $('question-day').textContent = `Sala ${activeRoom?.code || participant.room_code} • Dia ${activeRoom?.day || participant.day}`;
+    $('answer-options').innerHTML = '';
+    message('answer-feedback', data.message || 'Aguarde a liberação do administrador.');
+    return;
+  }
   if (!data || data.status === 'complete') {
-    $('question-text').textContent = kind === 'official' ? 'Você já concluiu as perguntas oficiais disponíveis para este dia.' : 'Você respondeu todas as perguntas bônus disponíveis para este dia.';
+    $('question-text').textContent = kind === 'official' ? 'Você concluiu o limite de perguntas oficiais deste dia ou não há perguntas ativas disponíveis.' : 'Você concluiu o limite de perguntas bônus deste dia ou não há perguntas ativas disponíveis.';
     $('question-kind').textContent = kind === 'official' ? 'OFICIAL' : 'BÔNUS';
     $('question-points').textContent = ''; $('question-day').textContent = `Sala ${activeRoom?.code || participant.room_code} • Dia ${activeRoom?.day || participant.day}`;
     $('answer-options').innerHTML = ''; return;
@@ -234,15 +243,104 @@ async function adminLogin() {
 $('admin-logout').addEventListener('click', async () => {
   await db.auth.signOut(); adminUser = null; $('admin-panel').classList.add('hidden'); $('admin-login').classList.remove('hidden');
 });
+function ensureModeSettingsUI() {
+  if ($('mode-settings-section')) return;
+  const anchor = document.querySelector('#admin-panel .admin-grid');
+  if (!anchor) return;
+  const section = document.createElement('section');
+  section.id = 'mode-settings-section';
+  section.className = 'admin-section';
+  section.innerHTML = `
+    <h3>CONTROLE DOS DESAFIOS</h3>
+    <p class="muted small">Configure separadamente a liberação e o limite de perguntas do desafio oficial e da rodada bônus. A regra também é validada no banco de dados.</p>
+    <div class="room-form">
+      <div><label for="mode-day">Dia da SIPAT</label>
+        <select id="mode-day">
+          <option value="1">Dia 1</option><option value="2">Dia 2</option>
+          <option value="3">Dia 3</option><option value="4">Dia 4</option><option value="5">Dia 5</option>
+        </select>
+      </div>
+    </div>
+    <div class="admin-grid" style="margin-top:14px">
+      <section>
+        <h3>DESAFIO OFICIAL</h3>
+        <label for="official-enabled">Liberação</label>
+        <select id="official-enabled"><option value="true">Ativado</option><option value="false">Desativado</option></select>
+        <label for="official-limit">Limite de perguntas por participante</label>
+        <input id="official-limit" type="number" min="1" max="100" value="10">
+        <p id="official-count" class="muted small"></p>
+      </section>
+      <section>
+        <h3>RODADA BÔNUS</h3>
+        <label for="bonus-enabled">Liberação</label>
+        <select id="bonus-enabled"><option value="true">Ativado</option><option value="false">Desativado</option></select>
+        <label for="bonus-limit">Limite de perguntas por participante</label>
+        <input id="bonus-limit" type="number" min="1" max="100" value="5">
+        <p id="bonus-count" class="muted small"></p>
+      </section>
+    </div>
+    <button id="save-mode-settings" class="primary">Salvar controles</button>
+    <p id="mode-settings-message" class="message" aria-live="polite"></p>`;
+  anchor.parentNode.insertBefore(section, anchor);
+  $('mode-day').addEventListener('change', loadModeSettings);
+  $('save-mode-settings').addEventListener('click', saveModeSettings);
+}
+
+async function loadModeSettings() {
+  if (!adminUser || !requireDB()) return;
+  ensureModeSettingsUI();
+  const { data, error } = await db.rpc('admin_get_mode_settings');
+  if (error) { message('mode-settings-message', `Não foi possível carregar os controles: ${error.message}`, true); return; }
+  const day = Number($('mode-day').value);
+  const rows = (data || []).filter(row => Number(row.day) === day);
+  const official = rows.find(row => row.kind === 'official');
+  const bonus = rows.find(row => row.kind === 'bonus');
+  if (!official || !bonus) { message('mode-settings-message', 'O banco não retornou as configurações dos dois modos. Execute a migração SQL enviada.', true); return; }
+  $('official-enabled').value = String(official.enabled);
+  $('official-limit').value = official.question_limit;
+  $('bonus-enabled').value = String(bonus.enabled);
+  $('bonus-limit').value = bonus.question_limit;
+  $('official-count').textContent = `${official.available_questions} pergunta(s) ativa(s) cadastrada(s) para este dia.`;
+  $('bonus-count').textContent = `${bonus.available_questions} pergunta(s) ativa(s) cadastrada(s) para este dia.`;
+  message('mode-settings-message', 'Configurações carregadas.');
+}
+
+async function saveModeSettings() {
+  if (!adminUser || !requireDB()) return;
+  const day = Number($('mode-day').value);
+  const officialLimit = Number($('official-limit').value);
+  const bonusLimit = Number($('bonus-limit').value);
+  if (![officialLimit, bonusLimit].every(n => Number.isInteger(n) && n >= 1 && n <= 100)) {
+    message('mode-settings-message', 'Informe limites inteiros entre 1 e 100.', true); return;
+  }
+  const btn = $('save-mode-settings'); btn.disabled = true;
+  const updates = [
+    { p_day: day, p_kind: 'official', p_enabled: $('official-enabled').value === 'true', p_question_limit: officialLimit },
+    { p_day: day, p_kind: 'bonus', p_enabled: $('bonus-enabled').value === 'true', p_question_limit: bonusLimit }
+  ];
+  for (const args of updates) {
+    const { error } = await db.rpc('admin_update_mode_settings', args);
+    if (error) {
+      btn.disabled = false;
+      message('mode-settings-message', `Falha ao salvar: ${error.message}`, true);
+      return;
+    }
+  }
+  btn.disabled = false;
+  message('mode-settings-message', `Controles do Dia ${day} salvos. As regras já estão valendo no servidor.`);
+  await loadModeSettings();
+}
+
 async function loadAdminData() {
   if (!adminUser) return;
+  ensureModeSettingsUI();
   const [p, q, a] = await Promise.all([
     db.from('participants').select('id', { count: 'exact', head: true }),
     db.from('questions').select('id', { count: 'exact', head: true }).eq('active', true),
     db.from('attempts').select('id', { count: 'exact', head: true })
   ]);
   $('admin-participants').textContent = p.count ?? '—'; $('admin-questions').textContent = q.count ?? '—'; $('admin-answers').textContent = a.count ?? '—';
-  await Promise.all([loadQuestionList(), loadRoomList()]);
+  await Promise.all([loadQuestionList(), loadRoomList(), loadModeSettings()]);
   const { data, error } = await db.from('admin_attempts_view').select('*').order('created_at', { ascending: false }).limit(40);
   const tbody = $('admin-attempts'); tbody.innerHTML = '';
   if (error) { tbody.innerHTML = `<tr><td colspan="5">${escapeHTML(error.message)}</td></tr>`; return; }
