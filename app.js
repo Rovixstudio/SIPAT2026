@@ -331,16 +331,86 @@ async function saveModeSettings() {
   await loadModeSettings();
 }
 
+function ensureParticipantManagementUI() {
+  if ($('participant-management-section')) return;
+  const anchor = document.querySelector('#admin-panel .admin-grid');
+  if (!anchor) return;
+  const section = document.createElement('section');
+  section.id = 'participant-management-section';
+  section.className = 'admin-section';
+  section.innerHTML = `
+    <div class="admin-head">
+      <div><h3>GERENCIAR PARTICIPANTES</h3>
+      <p class="muted small">Remova perfis de teste ou participantes duplicados. A exclusão apaga também as respostas e os pontos daquele perfil.</p></div>
+      <button id="refresh-admin-participants" class="secondary">Atualizar lista</button>
+    </div>
+    <div id="admin-participant-list" class="room-list"><p class="muted">Carregando participantes...</p></div>
+    <p id="participant-management-message" class="message" aria-live="polite"></p>`;
+  anchor.parentNode.insertBefore(section, anchor);
+  $('refresh-admin-participants').addEventListener('click', loadAdminParticipants);
+}
+
+async function loadAdminParticipants() {
+  if (!adminUser || !requireDB()) return;
+  ensureParticipantManagementUI();
+  const box = $('admin-participant-list');
+  box.innerHTML = '<p class="muted">Carregando participantes...</p>';
+  const { data, error } = await db.rpc('admin_list_participants');
+  if (error) {
+    box.textContent = `Não foi possível carregar participantes: ${error.message}`;
+    return;
+  }
+  box.innerHTML = '';
+  if (!data?.length) {
+    box.innerHTML = '<p class="empty-note">Nenhum participante cadastrado.</p>';
+    return;
+  }
+  data.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'room-row';
+    const info = document.createElement('div');
+    info.className = 'room-row-info';
+    const title = document.createElement('span');
+    title.textContent = `${p.avatar || '🙂'} ${p.name} • ${p.sector}`;
+    const meta = document.createElement('small');
+    meta.textContent = `${p.points} pontos • ${p.answers} respostas`;
+    info.append(title, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'remove-question';
+    remove.textContent = 'Excluir';
+    remove.title = 'Excluir participante, respostas e pontos';
+    remove.addEventListener('click', async () => {
+      const confirmed = confirm(`Excluir definitivamente o participante "${p.name}" do setor "${p.sector}"?\n\nTodas as respostas e os pontos desse perfil também serão apagados. Essa ação não pode ser desfeita.`);
+      if (!confirmed) return;
+      remove.disabled = true;
+      const { error: deleteError } = await db.rpc('admin_delete_participant', { p_participant_id: p.participant_id });
+      if (deleteError) {
+        remove.disabled = false;
+        message('participant-management-message', `Não foi possível excluir: ${deleteError.message}`, true);
+        return;
+      }
+      message('participant-management-message', `Participante ${p.name} e seu histórico foram excluídos.`);
+      await loadAdminParticipants();
+      await loadAdminData();
+      await loadRanking();
+    });
+    row.append(info, remove);
+    box.appendChild(row);
+  });
+}
+
 async function loadAdminData() {
   if (!adminUser) return;
   ensureModeSettingsUI();
+  ensureParticipantManagementUI();
   const [p, q, a] = await Promise.all([
     db.from('participants').select('id', { count: 'exact', head: true }),
     db.from('questions').select('id', { count: 'exact', head: true }).eq('active', true),
     db.from('attempts').select('id', { count: 'exact', head: true })
   ]);
   $('admin-participants').textContent = p.count ?? '—'; $('admin-questions').textContent = q.count ?? '—'; $('admin-answers').textContent = a.count ?? '—';
-  await Promise.all([loadQuestionList(), loadRoomList(), loadModeSettings()]);
+  await Promise.all([loadQuestionList(), loadRoomList(), loadModeSettings(), loadAdminParticipants()]);
   const { data, error } = await db.from('admin_attempts_view').select('*').order('created_at', { ascending: false }).limit(40);
   const tbody = $('admin-attempts'); tbody.innerHTML = '';
   if (error) { tbody.innerHTML = `<tr><td colspan="5">${escapeHTML(error.message)}</td></tr>`; return; }
