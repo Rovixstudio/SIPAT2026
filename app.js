@@ -384,8 +384,16 @@ async function loadAdminParticipants() {
       const confirmed = confirm(`Excluir definitivamente o participante "${p.name}" do setor "${p.sector}"?\n\nTodas as respostas e os pontos desse perfil também serão apagados. Essa ação não pode ser desfeita.`);
       if (!confirmed) return;
       remove.disabled = true;
-      const { error: deleteError } = await db.rpc('admin_delete_participant', { p_participant_id: p.id });
-      if (deleteError) {
+     const participantId = p.id;
+
+if (!participantId) {
+  alert('Erro: ID do participante não encontrado.');
+  return;
+}
+
+const { error: deleteError } = await db.rpc('admin_delete_participant', {
+  p_participant_id: participantId
+});
         remove.disabled = false;
         message('participant-management-message', `Não foi possível excluir: ${deleteError.message}`, true);
         return;
