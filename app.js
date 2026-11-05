@@ -373,7 +373,7 @@ async function loadAdminParticipants() {
     const title = document.createElement('span');
     title.textContent = `${p.avatar || '🙂'} ${p.name} • ${p.sector}`;
     const meta = document.createElement('small');
-    meta.textContent = `${p.points} pontos • ${p.answers} respostas`;
+    meta.textContent = `${p.points} pontos • ${p.answers_count} respostas`;
     info.append(title, meta);
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -384,7 +384,7 @@ async function loadAdminParticipants() {
       const confirmed = confirm(`Excluir definitivamente o participante "${p.name}" do setor "${p.sector}"?\n\nTodas as respostas e os pontos desse perfil também serão apagados. Essa ação não pode ser desfeita.`);
       if (!confirmed) return;
       remove.disabled = true;
-      const { error: deleteError } = await db.rpc('admin_delete_participant', { p_participant_id: p.participant_id });
+      const { error: deleteError } = await db.rpc('admin_delete_participant', { p_participant_id: p.id });
       if (deleteError) {
         remove.disabled = false;
         message('participant-management-message', `Não foi possível excluir: ${deleteError.message}`, true);
