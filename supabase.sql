@@ -201,7 +201,7 @@ grant execute on function public.participant_submit_answer(text,uuid,smallint) t
 grant execute on function public.participant_my_stats(text) to anon,authenticated;
 grant execute on function public.public_leaderboard(integer) to anon,authenticated;
 grant execute on function public.admin_export_leaderboard() to authenticated;
-grant select on public.admin_attempts_view to authenticated;
+grant select on public.admin_attempts_view to authenticated; 
 
 -- Perguntas demonstrativas. Troque ou amplie o banco antes da SIPAT.
 insert into public.questions(day,kind,prompt,options,correct_index,points) values
