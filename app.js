@@ -5,11 +5,11 @@
 
 const CONFIG = {
   SUPABASE_URL: 'https://kffdbfmawbdewnlzuqdm.supabase.co',
-  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmZmRiZm1hd2JkZXdubHp1cWRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MDI0ODAsImV4cCI6MjEwOTQ3ODQ4MH0.QTD_qlWUDZqrJ009HRmvscjn31t3H2Vs7_dkzRUm9NE'
+  SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtmZmRiZm1hd2JkZXdubHp1cWRtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTM5MDI0ODAsImV4cCI6MjEwOTQ3ODQ4MH0.QTD_qlWUDZ[...]
 };
 const db = window.supabase?.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 const TOKEN_KEY = 'sipat_challenge_participant_token_v1';
-const AVATARS = ['👷','👷‍♀️','🦺','⛑️','🚧','🏗️','🧤','🧑‍🔧','👩‍🔧','👨‍🏭','👩‍🏭','🧑‍🚒','🦺','🛠️','🦺','🧑‍🔬','👩‍🔬','👨‍🔬','🤖','🦊','🐼','🦁','🐯','🐸','🐵','🐻','🐨','🐰','🐱','🐶','🐺','🦉','🐢','🐙','🐝','🐬','🦈','🦖','🦋','🦝'];
+const AVATARS = ['👷','👷‍♀️','🦺','⛑️','🚧','🏗️','🧤','🧑‍🔧','👩‍🔧','👨‍🏭','👩‍🏭','🧑‍🚒','🦺','🛠️','🦺','🧑‍🔬','👩‍🔬','🧰','🧑‍🏭'];
 const $ = id => document.getElementById(id);
 let participant = null;
 let accessToken = '';
@@ -373,7 +373,7 @@ async function loadAdminParticipants() {
     const title = document.createElement('span');
     title.textContent = `${p.avatar || '🙂'} ${p.name} • ${p.sector}`;
     const meta = document.createElement('small');
-    meta.textContent = `${p.points} pontos • ${p.answers_count} respostas`;
+    meta.textContent = `${p.points} pontos • ${p.answers} respostas`;
     info.append(title, meta);
     const remove = document.createElement('button');
     remove.type = 'button';
@@ -384,20 +384,24 @@ async function loadAdminParticipants() {
       const confirmed = confirm(`Excluir definitivamente o participante "${p.name}" do setor "${p.sector}"?\n\nTodas as respostas e os pontos desse perfil também serão apagados. Essa ação não pode ser desfeita.`);
       if (!confirmed) return;
       remove.disabled = true;
-     const participantId = p.id;
 
-if (!participantId) {
-  alert('Erro: ID do participante não encontrado.');
-  return;
-}
-
-const { error: deleteError } = await db.rpc('admin_delete_participant', {
-  p_participant_id: participantId
-});
+      const participantId = p.participant_id;
+      if (!participantId) {
+        message('participant-management-message', 'Erro: ID do participante não encontrado.', true);
         remove.disabled = false;
+        return;
+      }
+
+      const { error: deleteError } = await db.rpc('admin_delete_participant', {
+        p_participant_id: participantId
+      });
+
+      remove.disabled = false;
+      if (deleteError) {
         message('participant-management-message', `Não foi possível excluir: ${deleteError.message}`, true);
         return;
       }
+
       message('participant-management-message', `Participante ${p.name} e seu histórico foram excluídos.`);
       await loadAdminParticipants();
       await loadAdminData();
@@ -460,7 +464,8 @@ function renderQuestionList() {
     const title = document.createElement('span'); title.textContent = q.prompt;
     const alternatives = document.createElement('small'); alternatives.textContent = (q.options || []).map((v, i) => `${String.fromCharCode(65+i)}: ${v}${i === q.correct_index ? ' ✓' : ''}`).join(' | ');
     info.append(meta, title, alternatives); row.appendChild(info);
-    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove-question'; remove.textContent = '−'; remove.title = q.active ? 'Desativar pergunta' : 'Pergunta desativada'; remove.disabled = !q.active;
+    const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'remove-question'; remove.textContent = '−'; remove.title = q.active ? 'Desativar pergunta' : 'Pergunta desativada';
+    remove.disabled = !q.active;
     remove.addEventListener('click', () => deactivateQuestion(q)); row.appendChild(remove); container.appendChild(row);
   });
 }
