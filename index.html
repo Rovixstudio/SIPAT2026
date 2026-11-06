@@ -3,128 +3,883 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#126b3a">
-  <meta name="description" content="SIPAT Challenge — conhecimento, prevenção e atitude.">
+
   <title>SIPAT Challenge</title>
+
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-  <script defer src="app.js"></script>
+
+  <!-- Supabase -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"
+    defer
+  ></script>
+
+  <!-- QRCode -->
+  <script
+    src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"
+    defer
+  ></script>
+
+  <!-- Aplicação -->
+  <script src="app.js" defer></script>
 </head>
+
 <body>
-<header class="topbar">
-  <a class="brand" href="#" id="brand-home"><span class="brand-mark">✚</span><span>SIPAT <b>CHALLENGE</b></span></a>
-  <nav>
-    <button class="nav-btn active" data-view="home">Início</button>
-    <button class="nav-btn" data-view="ranking">Ranking</button>
-    <button class="nav-btn" data-view="admin">Administração</button>
-  </nav>
+
+<header class="site-header">
+  <div class="header-inner">
+
+    <div class="brand">
+      <span class="brand-icon">🦺</span>
+      <div>
+        <h1>SIPAT Challenge</h1>
+        <p>Segurança, conhecimento e diversão</p>
+      </div>
+    </div>
+
+    <nav class="main-nav" aria-label="Navegação principal">
+      <button type="button" class="nav-button active" data-view="home-view">
+        🏠 Início
+      </button>
+
+      <button type="button" class="nav-button" data-view="ranking-view">
+        🏆 Ranking
+      </button>
+
+      <button type="button" class="nav-button" data-view="admin-view">
+        ⚙️ Admin
+      </button>
+    </nav>
+
+  </div>
 </header>
-<main class="wrap">
-  <section class="hero">
-    <div>
-      <span class="eyebrow">CINCO DIAS • UMA GRANDE CONQUISTA</span>
-      <h1>Conhecimento que<br><em>vale pontos.</em></h1>
-      <p>Responda aos desafios, some pontos e suba no ranking da SIPAT.</p>
-      <div class="hero-pills"><span>✓ Desafio oficial diário</span><span>★ Rodadas bônus</span><span>🏆 Ranking geral</span></div>
-    </div>
-    <div class="hero-art"><div class="hero-shield">✚</div><div class="hero-star">★</div><div class="hero-caption">SEGURANÇA<br>É ATITUDE!</div></div>
-  </section>
 
-  <section id="view-home" class="view active">
-    <div class="section-heading"><div><span class="eyebrow green">ÁREA DO PARTICIPANTE</span><h2>Entre na competição</h2></div><span class="live-dot">Sistema online</span></div>
-    <div class="columns">
-      <article class="card">
-        <div id="room-invalid" class="hidden"><h3>Sala indisponível</h3><p id="room-invalid-message" class="message error"></p></div>
-        <div id="login-panel">
-          <h3 id="join-title">Identifique-se</h3>
-          <p class="muted" id="join-description">Acesse pelo QR Code oficial da sua sala e informe seus dados para participar.</p>
-          <div id="room-context" class="room-context hidden"></div>
-          <form id="join-form">
-            <label for="participant-name">Nome completo</label>
-            <input id="participant-name" maxlength="80" autocomplete="name" required placeholder="Digite seu nome">
-            <label for="participant-sector">Setor</label>
-            <input id="participant-sector" maxlength="80" required placeholder="Ex.: Produção, Qualidade, SST">
-            <label>Escolha seu avatar</label>
-            <div id="avatar-picker" class="avatar-grid"></div>
-            <button id="join-btn" class="primary full" type="submit">Entrar na sala →</button>
-          </form>
-          <p id="login-message" class="message" aria-live="polite"></p>
-        </div>
-        <div id="participant-panel" class="hidden">
-          <div class="profile-row"><div id="my-avatar" class="avatar big">👷</div><div><h3 id="my-name">Participante</h3><p id="my-sector" class="muted"></p><span id="my-room" class="badge"></span></div></div>
-          <div class="stats"><div><strong id="my-points">0</strong><span>Pontos</span></div><div><strong id="my-rank">—</strong><span>Posição</span></div><div><strong id="my-attempts">0</strong><span>Respostas</span></div></div>
-          <label for="avatar-picker">Seu avatar</label><div id="avatar-picker-logged" class="avatar-grid"></div>
-          <button id="save-avatar" class="secondary full">Salvar avatar</button>
-          <div class="challenge-actions"><button id="official-btn" class="primary full">Jogar desafio oficial</button><button id="bonus-btn" class="secondary full">Jogar rodada bônus</button></div>
-          <p id="game-message" class="message" aria-live="polite"></p>
-          <button id="participant-logout" class="text-button" type="button">Sair desta participação</button>
-        </div>
-      </article>
-      <article class="card quiz-card">
-        <div class="quiz-top"><span class="eyebrow green">SUA PRÓXIMA MISSÃO</span><span class="badge">SIPAT 5 DIAS</span></div>
-        <div id="quiz-empty" class="quiz-empty"><div class="quiz-icon">?</div><h3>Prepare-se para o desafio</h3><p class="muted">Entre na sala para carregar uma pergunta oficial ou uma rodada bônus do dia correspondente.</p></div>
-        <div id="quiz-area" class="hidden">
-          <div class="question-meta"><span id="question-kind" class="badge">OFICIAL</span><span id="question-points" class="muted"></span></div>
-          <p id="question-day" class="muted"></p><h3 id="question-text"></h3>
-          <div id="answer-options" class="answer-list"></div>
-          <button id="answer-submit" class="primary full" disabled>Confirmar resposta</button>
-          <div id="answer-feedback" class="message" aria-live="polite"></div>
-        </div>
-      </article>
-    </div>
-  </section>
+<main class="container">
 
-  <section id="view-ranking" class="view">
-    <div class="section-heading"><div><span class="eyebrow green">PLACAR DA SIPAT</span><h2>Ranking geral</h2></div><button id="refresh-ranking" class="secondary">Atualizar ↻</button></div>
-    <article class="card"><div class="table-wrap"><table><thead><tr><th>#</th><th>Participante</th><th>Setor</th><th>Pontos</th></tr></thead><tbody id="ranking-body"><tr><td colspan="4">Carregando ranking...</td></tr></tbody></table></div><p class="muted small">O placar público exibe apenas nome, setor, avatar e pontuação.</p></article>
-  </section>
+  <!-- =========================
+       HOME
+  ========================== -->
 
-  <section id="view-admin" class="view">
-    <div class="section-heading"><div><span class="eyebrow green">ACESSO RESTRITO</span><h2>Painel administrativo</h2></div><span class="badge private">Privado</span></div>
-    <article class="card">
-      <div id="admin-login">
-        <h3>Entrar como administrador</h3><p class="muted">Use a conta administrativa já cadastrada no Supabase Auth.</p>
-        <label for="admin-email">E-mail</label><input id="admin-email" type="email" autocomplete="username" placeholder="administrador@empresa.com">
-        <label for="admin-password">Senha</label><input id="admin-password" type="password" autocomplete="current-password" placeholder="Sua senha">
-        <button id="admin-login-btn" class="primary">Entrar no painel →</button><p id="admin-message" class="message"></p>
+  <section id="home-view" class="view active-view">
+
+    <!-- Entrada do participante -->
+    <div id="join-panel" class="card">
+
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">PARTICIPANTE</span>
+          <h2>Entre no desafio</h2>
+          <p>
+            Informe seus dados para participar da SIPAT.
+          </p>
+        </div>
       </div>
-      <div id="admin-panel" class="hidden">
-        <div class="admin-head"><div><h3>Central de controle</h3><p id="admin-who" class="muted"></p></div><button id="admin-logout" class="secondary">Sair</button></div>
-        <div class="stats admin-stats"><div><strong id="admin-participants">—</strong><span>Participantes</span></div><div><strong id="admin-questions">—</strong><span>Perguntas ativas</span></div><div><strong id="admin-answers">—</strong><span>Respostas</span></div></div>
 
-        <section class="admin-section">
-          <h3>GERENCIAR SALAS</h3><p class="muted small">Crie uma sala, associe o dia da SIPAT e ative o acesso por QR Code. Apenas uma sala fica ativa para novas entradas.</p>
-          <div class="room-form">
-            <div><label for="room-code">Código da sala</label><input id="room-code" maxlength="30" value="555" placeholder="Ex.: 555"></div>
-            <div><label for="room-day">Dia da SIPAT</label><select id="room-day"><option value="1">Dia 1</option><option value="2">Dia 2</option><option value="3">Dia 3</option><option value="4">Dia 4</option><option value="5">Dia 5</option></select></div>
-            <button id="create-room" class="primary">Criar / ativar sala</button>
+      <form id="join-form">
+
+        <div class="form-grid">
+
+          <div class="form-group">
+            <label for="participant-name">
+              Nome
+            </label>
+
+            <input
+              id="participant-name"
+              type="text"
+              maxlength="80"
+              autocomplete="name"
+              required
+              placeholder="Digite seu nome"
+            >
           </div>
-          <p id="room-admin-message" class="message"></p>
-          <div id="active-room" class="active-room">Carregando sala ativa...</div>
-          <div class="room-tools"><button id="make-room-qr" class="secondary">Gerar QR Code da sala ativa</button><button id="copy-room-link" class="secondary">Copiar link da sala</button></div>
-          <div id="qr-output" class="qr-output"></div>
-          <div id="room-list" class="room-list"></div>
-        </section>
 
-        <div class="admin-grid">
-          <section><h3>Adicionar pergunta</h3>
-            <label for="q-day">Dia</label><select id="q-day"><option value="1">Dia 1</option><option value="2">Dia 2</option><option value="3">Dia 3</option><option value="4">Dia 4</option><option value="5">Dia 5</option></select>
-            <label for="q-kind">Tipo</label><select id="q-kind"><option value="official">Oficial</option><option value="bonus">Bônus</option></select>
-            <label for="q-points">Pontos</label><input id="q-points" type="number" min="1" max="1000" value="100">
-            <label for="q-text">Pergunta</label><textarea id="q-text" rows="3" placeholder="Digite a pergunta"></textarea>
-            <div class="option-fields"><label>Alternativa A<input id="opt-0"></label><label>Alternativa B<input id="opt-1"></label><label>Alternativa C<input id="opt-2"></label><label>Alternativa D<input id="opt-3"></label></div>
-            <label for="q-correct">Resposta correta</label><select id="q-correct"><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select>
-            <button id="add-question" class="primary full">Cadastrar pergunta</button><p id="question-message" class="message"></p>
-          </section>
-          <section><h3>Minhas perguntas</h3><label for="question-filter-day">Filtrar por dia</label><select id="question-filter-day"><option value="all">Todos os dias</option><option value="1">Dia 1</option><option value="2">Dia 2</option><option value="3">Dia 3</option><option value="4">Dia 4</option><option value="5">Dia 5</option></select><div id="admin-question-list" class="question-list"><p class="muted">Carregando perguntas...</p></div></section>
+          <div class="form-group">
+            <label for="participant-sector">
+              Setor
+            </label>
+
+            <input
+              id="participant-sector"
+              type="text"
+              maxlength="80"
+              required
+              placeholder="Digite seu setor"
+            >
+          </div>
+
         </div>
-        <section class="admin-section"><div class="admin-head"><h3>Ferramentas e resultados</h3><button id="export-ranking" class="secondary">Exportar ranking CSV</button></div><div class="admin-table"><h4>Últimas respostas</h4><div class="table-wrap"><table><thead><tr><th>Participante</th><th>Dia</th><th>Tipo</th><th>Resultado</th><th>Pontos</th></tr></thead><tbody id="admin-attempts"></tbody></table></div></div></section>
+
+        <div class="form-group">
+          <span class="field-label">
+            Escolha seu avatar
+          </span>
+
+          <div
+            id="avatar-picker"
+            class="avatar-picker"
+            role="radiogroup"
+            aria-label="Escolha seu avatar"
+          ></div>
+        </div>
+
+        <div id="room-context" class="room-context hidden"></div>
+
+        <button
+          id="join-button"
+          type="submit"
+          class="primary-button"
+        >
+          🚀 Participar
+        </button>
+
+      </form>
+
+      <div
+        id="join-message"
+        class="message"
+        role="alert"
+        aria-live="polite"
+      ></div>
+
+    </div>
+
+    <!-- Painel do participante -->
+    <div id="participant-panel" class="hidden">
+
+      <div class="card participant-card">
+
+        <div class="participant-header">
+
+          <div class="participant-profile">
+
+            <div
+              id="participant-avatar"
+              class="participant-avatar"
+              aria-hidden="true"
+            >
+              🙂
+            </div>
+
+            <div>
+              <h2 id="participant-name-display">
+                Participante
+              </h2>
+
+              <p id="participant-sector-display">
+                Setor
+              </p>
+
+              <small id="participant-room-display">
+                Sala
+              </small>
+            </div>
+
+          </div>
+
+          <button
+            id="participant-logout"
+            type="button"
+            class="secondary-button"
+          >
+            Sair
+          </button>
+
+        </div>
+
+        <div class="stats-grid">
+
+          <div class="stat-card">
+            <span>Pontos</span>
+            <strong id="participant-points">0</strong>
+          </div>
+
+          <div class="stat-card">
+            <span>Posição</span>
+            <strong id="participant-rank">—</strong>
+          </div>
+
+          <div class="stat-card">
+            <span>Respostas</span>
+            <strong id="participant-answers">0</strong>
+          </div>
+
+        </div>
+
+        <div class="participant-actions">
+
+          <button
+            id="change-avatar-button"
+            type="button"
+            class="secondary-button"
+          >
+            🧑 Trocar avatar
+          </button>
+
+          <button
+            id="official-challenge-button"
+            type="button"
+            class="primary-button"
+          >
+            🏆 Desafio oficial
+          </button>
+
+          <button
+            id="bonus-challenge-button"
+            type="button"
+            class="secondary-button"
+          >
+            ⭐ Desafio bônus
+          </button>
+
+        </div>
+
+        <div
+          id="logged-avatar-picker"
+          class="avatar-picker hidden"
+          role="radiogroup"
+          aria-label="Escolha seu novo avatar"
+        ></div>
+
       </div>
-    </article>
+
+      <!-- Quiz -->
+      <div id="quiz-panel" class="card hidden">
+
+        <div class="quiz-meta">
+
+          <span id="question-type">
+            Desafio
+          </span>
+
+          <span id="question-points">
+            0 pontos
+          </span>
+
+          <span id="question-day">
+            Dia —
+          </span>
+
+        </div>
+
+        <h2 id="question-text">
+          Pergunta
+        </h2>
+
+        <form id="answer-form">
+
+          <div
+            id="answer-options"
+            class="answer-options"
+          ></div>
+
+          <button
+            id="submit-answer-button"
+            type="submit"
+            class="primary-button"
+            disabled
+          >
+            Responder
+          </button>
+
+        </form>
+
+        <div
+          id="answer-feedback"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+      </div>
+
+    </div>
+
   </section>
+
+  <!-- =========================
+       RANKING
+  ========================== -->
+
+  <section id="ranking-view" class="view hidden">
+
+    <div class="card">
+
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">CLASSIFICAÇÃO</span>
+          <h2>Ranking SIPAT</h2>
+          <p>
+            Confira a pontuação dos participantes.
+          </p>
+        </div>
+
+        <button
+          id="refresh-ranking-button"
+          type="button"
+          class="secondary-button"
+        >
+          🔄 Atualizar
+        </button>
+      </div>
+
+      <div class="table-wrapper">
+
+        <table id="ranking-table">
+
+          <thead>
+            <tr>
+              <th>Posição</th>
+              <th>Participante</th>
+              <th>Setor</th>
+              <th>Pontos</th>
+              <th>Respostas</th>
+            </tr>
+          </thead>
+
+          <tbody id="ranking-body">
+          </tbody>
+
+        </table>
+
+      </div>
+
+      <div
+        id="ranking-message"
+        class="message"
+        role="alert"
+        aria-live="polite"
+      ></div>
+
+    </div>
+
+  </section>
+
+  <!-- =========================
+       ADMIN
+  ========================== -->
+
+  <section id="admin-view" class="view hidden">
+
+    <!-- Login -->
+    <div id="admin-login-panel" class="card">
+
+      <div class="section-header">
+        <div>
+          <span class="eyebrow">ADMINISTRAÇÃO</span>
+          <h2>Acesso administrativo</h2>
+          <p>
+            Entre com sua conta administrativa.
+          </p>
+        </div>
+      </div>
+
+      <form id="admin-login-form">
+
+        <div class="form-group">
+          <label for="admin-email">
+            E-mail
+          </label>
+
+          <input
+            id="admin-email"
+            type="email"
+            autocomplete="email"
+            required
+            placeholder="admin@empresa.com"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="admin-password">
+            Senha
+          </label>
+
+          <input
+            id="admin-password"
+            type="password"
+            autocomplete="current-password"
+            required
+            placeholder="Digite sua senha"
+          >
+        </div>
+
+        <button
+          type="submit"
+          class="primary-button"
+        >
+          🔐 Entrar
+        </button>
+
+      </form>
+
+      <div
+        id="admin-login-message"
+        class="message"
+        role="alert"
+        aria-live="polite"
+      ></div>
+
+    </div>
+
+    <!-- Painel admin -->
+    <div id="admin-panel" class="hidden">
+
+      <div class="card">
+
+        <div class="admin-header">
+
+          <div>
+            <span class="eyebrow">ADMINISTRADOR</span>
+            <h2>Painel de controle</h2>
+            <p id="admin-user-display"></p>
+          </div>
+
+          <button
+            id="admin-logout-button"
+            type="button"
+            class="secondary-button"
+          >
+            Sair
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- Salas -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">SALAS</span>
+            <h2>Gerenciar salas</h2>
+          </div>
+        </div>
+
+        <form id="create-room-form">
+
+          <div class="form-grid">
+
+            <div class="form-group">
+              <label for="room-code">
+                Código da sala
+              </label>
+
+              <input
+                id="room-code"
+                type="text"
+                maxlength="30"
+                placeholder="Ex.: SIPAT2026"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="room-name">
+                Nome da sala
+              </label>
+
+              <input
+                id="room-name"
+                type="text"
+                maxlength="80"
+                placeholder="Ex.: SIPAT Matriz"
+              >
+            </div>
+
+          </div>
+
+          <button
+            type="submit"
+            class="primary-button"
+          >
+            ➕ Criar / ativar sala
+          </button>
+
+        </form>
+
+        <div
+          id="room-message"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+        <div id="admin-room-list"></div>
+
+        <div id="qr-area" class="qr-area hidden">
+
+          <h3>QR Code da sala</h3>
+
+          <div id="qr-code"></div>
+
+          <p id="qr-link"></p>
+
+          <button
+            id="copy-room-link-button"
+            type="button"
+            class="secondary-button"
+          >
+            📋 Copiar link
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- Configuração de modos -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">CONFIGURAÇÕES</span>
+            <h2>Modos de desafio</h2>
+          </div>
+        </div>
+
+        <div id="mode-settings"></div>
+
+        <div
+          id="mode-settings-message"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+      </div>
+
+      <!-- Participantes -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">PARTICIPANTES</span>
+            <h2>Gerenciar participantes</h2>
+          </div>
+
+          <button
+            id="refresh-participants-button"
+            type="button"
+            class="secondary-button"
+          >
+            🔄 Atualizar
+          </button>
+        </div>
+
+        <div
+          id="admin-participant-list"
+          class="admin-list"
+        ></div>
+
+        <div
+          id="participant-management-message"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+      </div>
+
+      <!-- Perguntas -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">PERGUNTAS</span>
+            <h2>Adicionar pergunta</h2>
+          </div>
+        </div>
+
+        <form id="question-form">
+
+          <div class="form-grid">
+
+            <div class="form-group">
+              <label for="question-kind">
+                Tipo
+              </label>
+
+              <select id="question-kind" required>
+                <option value="official">
+                  Oficial
+                </option>
+
+                <option value="bonus">
+                  Bônus
+                </option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="question-day">
+                Dia
+              </label>
+
+              <input
+                id="question-day"
+                type="number"
+                min="1"
+                max="5"
+                value="1"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="question-points">
+                Pontos
+              </label>
+
+              <input
+                id="question-points"
+                type="number"
+                min="0"
+                value="10"
+                required
+              >
+            </div>
+
+          </div>
+
+          <div class="form-group">
+
+            <label for="question-text-admin">
+              Pergunta
+            </label>
+
+            <textarea
+              id="question-text-admin"
+              rows="3"
+              maxlength="1000"
+              required
+            ></textarea>
+
+          </div>
+
+          <div class="form-grid">
+
+            <div class="form-group">
+              <label for="option-0">
+                Alternativa A
+              </label>
+
+              <input
+                id="option-0"
+                type="text"
+                maxlength="300"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="option-1">
+                Alternativa B
+              </label>
+
+              <input
+                id="option-1"
+                type="text"
+                maxlength="300"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="option-2">
+                Alternativa C
+              </label>
+
+              <input
+                id="option-2"
+                type="text"
+                maxlength="300"
+                required
+              >
+            </div>
+
+            <div class="form-group">
+              <label for="option-3">
+                Alternativa D
+              </label>
+
+              <input
+                id="option-3"
+                type="text"
+                maxlength="300"
+                required
+              >
+            </div>
+
+          </div>
+
+          <div class="form-group">
+
+            <label for="correct-index">
+              Alternativa correta
+            </label>
+
+            <select id="correct-index" required>
+              <option value="0">A</option>
+              <option value="1">B</option>
+              <option value="2">C</option>
+              <option value="3">D</option>
+            </select>
+
+          </div>
+
+          <button
+            type="submit"
+            class="primary-button"
+          >
+            ➕ Adicionar pergunta
+          </button>
+
+        </form>
+
+        <div
+          id="question-message"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+      </div>
+
+      <!-- Lista de perguntas -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">BANCO DE QUESTÕES</span>
+            <h2>Gerenciar perguntas</h2>
+          </div>
+        </div>
+
+        <div class="filters">
+
+          <div class="form-group">
+            <label for="question-filter-kind">
+              Tipo
+            </label>
+
+            <select id="question-filter-kind">
+              <option value="">Todos</option>
+              <option value="official">Oficial</option>
+              <option value="bonus">Bônus</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="question-filter-day">
+              Dia
+            </label>
+
+            <select id="question-filter-day">
+              <option value="">Todos</option>
+              <option value="1">Dia 1</option>
+              <option value="2">Dia 2</option>
+              <option value="3">Dia 3</option>
+              <option value="4">Dia 4</option>
+              <option value="5">Dia 5</option>
+            </select>
+          </div>
+
+        </div>
+
+        <div id="admin-question-list"></div>
+
+      </div>
+
+      <!-- Dados -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">DADOS</span>
+            <h2>Resumo</h2>
+          </div>
+        </div>
+
+        <div id="admin-summary"></div>
+
+        <div
+          id="admin-data-message"
+          class="message"
+          role="alert"
+          aria-live="polite"
+        ></div>
+
+        <div class="admin-actions">
+
+          <button
+            id="refresh-admin-data-button"
+            type="button"
+            class="secondary-button"
+          >
+            🔄 Atualizar dados
+          </button>
+
+          <button
+            id="export-ranking-button"
+            type="button"
+            class="primary-button"
+          >
+            📥 Exportar ranking
+          </button>
+
+        </div>
+
+      </div>
+
+      <!-- Últimas respostas -->
+      <div class="card">
+
+        <div class="section-header">
+          <div>
+            <span class="eyebrow">RESPOSTAS</span>
+            <h2>Últimas respostas</h2>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+
+          <table id="admin-attempts-table">
+
+            <thead>
+              <tr>
+                <th>Participante</th>
+                <th>Setor</th>
+                <th>Tipo</th>
+                <th>Dia</th>
+                <th>Pergunta</th>
+                <th>Resultado</th>
+                <th>Pontos</th>
+                <th>Data</th>
+              </tr>
+            </thead>
+
+            <tbody id="admin-attempts-body">
+            </tbody>
+
+          </table>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </section>
+
 </main>
-<footer>SIPAT CHALLENGE • CONHECIMENTO, PREVENÇÃO E ATITUDE</footer>
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<div
+  id="toast"
+  class="toast"
+  role="status"
+  aria-live="polite"
+></div>
+
 </body>
 </html>
