@@ -1,268 +1,731 @@
--- SIPAT CHALLENGE — CORREÇÃO DE SALA, PERFIL ÚNICO E EXCLUSÃO ADMINISTRATIVA
--- Migração ADITIVA. Não apaga nem reinicia dados existentes.
--- Execute APÓS as migrações de salas e de controle de modos.
-begin;
+BEGIN;
 
--- 1) Corrige perfis antigos sem sala: ao jogar, são vinculados à sala ativa.
--- Também corrige o cadastro: mesmo nome + setor na SIPAT reutiliza o perfil,
--- preservando respostas e pontos. O avatar pode ser atualizado.
-create or replace function public.participant_join_room(
+-- =========================================================
+-- SIPAT CHALLENGE
+-- CORREÇÃO / MIGRAÇÃO
+-- =========================================================
+
+-- ---------------------------------------------------------
+-- PARTICIPANTE: ENTRAR NA SALA
+-- ---------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.participant_join_room(
   p_room_code text,
   p_name text,
   p_sector text,
-  p_avatar text default '👷'
+  p_avatar text
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  r public.sipat_rooms;
-  existing_p public.participants;
-  new_token text;
-  normalized_name text;
-  normalized_sector text;
-begin
-  if length(trim(coalesce(p_name,''))) < 2 or length(trim(p_name)) > 80 then
-    raise exception 'Informe um nome entre 2 e 80 caracteres';
-  end if;
-  if length(trim(coalesce(p_sector,''))) < 2 or length(trim(p_sector)) > 80 then
-    raise exception 'Informe um setor entre 2 e 80 caracteres';
-  end if;
-  if length(coalesce(p_avatar,'')) > 16 then
-    raise exception 'Avatar inválido';
-  end if;
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_room record;
+  v_participant record;
 
-  select * into r
-  from public.sipat_rooms
-  where code=trim(p_room_code) and active=true
-  for share;
+  v_name text;
+  v_sector text;
+  v_avatar text;
 
-  if not found then
-    raise exception 'Sala inexistente ou inativa';
-  end if;
+  v_access_code text;
+  v_session_token text;
 
-  normalized_name := lower(regexp_replace(trim(p_name), '\s+', ' ', 'g'));
-  normalized_sector := lower(regexp_replace(trim(p_sector), '\s+', ' ', 'g'));
+  v_name_normalized text;
+  v_sector_normalized text;
+BEGIN
 
-  -- Evita duas entradas simultâneas criarem dois perfis para a mesma pessoa.
-  perform pg_advisory_xact_lock(hashtext('sipat_profile:' || normalized_name || ':' || normalized_sector));
+  v_name :=
+    regexp_replace(
+      trim(coalesce(p_name, '')),
+      '\s+',
+      ' ',
+      'g'
+    );
 
-  select p.* into existing_p
-  from public.participants p
-  where p.active=true
-    and lower(regexp_replace(trim(p.name), '\s+', ' ', 'g'))=normalized_name
-    and lower(regexp_replace(trim(p.sector), '\s+', ' ', 'g'))=normalized_sector
-  order by
-    case when p.room_id=r.id then 0 else 1 end,
-    (select count(*) from public.attempts a where a.participant_id=p.id) desc,
-    p.id asc
-  limit 1
-  for update;
+  v_sector :=
+    regexp_replace(
+      trim(coalesce(p_sector, '')),
+      '\s+',
+      ' ',
+      'g'
+    );
 
-  new_token := encode(gen_random_bytes(32), 'hex');
+  v_avatar :=
+    trim(coalesce(p_avatar, '🙂'));
 
-  if found then
-    update public.participants
-    set room_id=r.id,
-        avatar=coalesce(nullif(p_avatar,''),avatar),
-        session_token_hash=encode(digest(new_token,'sha256'),'hex'),
-        access_code_hash=encode(digest(upper(new_token),'sha256'),'hex'),
-        last_seen_at=now(),
-        active=true
-    where id=existing_p.id;
+  IF v_name = '' THEN
+    RAISE EXCEPTION 'Informe o nome.';
+  END IF;
 
-    return jsonb_build_object(
-      'access_token',new_token,
-      'reused',true,
-      'participant',jsonb_build_object(
-        'id',existing_p.id,
-        'name',existing_p.name,
-        'sector',existing_p.sector,
-        'avatar',coalesce(nullif(p_avatar,''),existing_p.avatar),
-        'room_code',r.code,
-        'day',r.day
+  IF v_sector = '' THEN
+    RAISE EXCEPTION 'Informe o setor.';
+  END IF;
+
+  IF length(v_name) > 80 THEN
+    RAISE EXCEPTION 'Nome muito longo.';
+  END IF;
+
+  IF length(v_sector) > 80 THEN
+    RAISE EXCEPTION 'Setor muito longo.';
+  END IF;
+
+  SELECT *
+  INTO v_room
+  FROM public.sipat_rooms
+  WHERE upper(room_code) =
+        upper(trim(p_room_code))
+    AND active = true
+  ORDER BY created_at DESC
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Sala não encontrada ou inativa.';
+  END IF;
+
+  v_name_normalized :=
+    lower(
+      regexp_replace(
+        trim(v_name),
+        '\s+',
+        ' ',
+        'g'
       )
     );
-  end if;
 
-  insert into public.participants(
-    access_code_hash,session_token_hash,name,sector,avatar,room_id,active
-  )
-  values(
-    encode(digest(upper(new_token),'sha256'),'hex'),
-    encode(digest(new_token,'sha256'),'hex'),
-    trim(p_name),trim(p_sector),coalesce(nullif(p_avatar,''),'👷'),r.id,true
-  )
-  returning * into existing_p;
+  v_sector_normalized :=
+    lower(
+      regexp_replace(
+        trim(v_sector),
+        '\s+',
+        ' ',
+        'g'
+      )
+    );
 
-  return jsonb_build_object(
-    'access_token',new_token,
-    'reused',false,
-    'participant',jsonb_build_object(
-      'id',existing_p.id,'name',existing_p.name,'sector',existing_p.sector,
-      'avatar',existing_p.avatar,'room_code',r.code,'day',r.day
+  -- Evita criação simultânea de perfis iguais.
+  PERFORM pg_advisory_xact_lock(
+    hashtext(
+      'sipat_profile:' ||
+      v_name_normalized ||
+      ':' ||
+      v_sector_normalized
     )
   );
-end;
+
+  /*
+    Primeiro tenta encontrar um perfil ativo
+    já existente.
+
+    Dá preferência ao participante da sala atual.
+  */
+  SELECT *
+  INTO v_participant
+  FROM public.participants p
+  WHERE p.active = true
+    AND lower(
+      regexp_replace(
+        trim(p.name),
+        '\s+',
+        ' ',
+        'g'
+      )
+    ) = v_name_normalized
+    AND lower(
+      regexp_replace(
+        trim(p.sector),
+        '\s+',
+        ' ',
+        'g'
+      )
+    ) = v_sector_normalized
+  ORDER BY
+    CASE
+      WHEN p.room_id = v_room.id THEN 0
+      ELSE 1
+    END,
+    (
+      SELECT count(*)
+      FROM public.attempts a
+      WHERE a.participant_id = p.id
+    ) DESC,
+    p.created_at DESC
+  LIMIT 1;
+
+  v_access_code :=
+    upper(
+      substr(
+        encode(
+          gen_random_bytes(8),
+          'hex'
+        ),
+        1,
+        12
+      )
+    );
+
+  v_session_token :=
+    encode(
+      gen_random_bytes(32),
+      'hex'
+    );
+
+  IF FOUND THEN
+
+    UPDATE public.participants
+    SET
+      room_id = v_room.id,
+      avatar = v_avatar,
+      active = true,
+      access_code_hash =
+        encode(
+          digest(
+            upper(v_access_code),
+            'sha256'
+          ),
+          'hex'
+        ),
+      session_token_hash =
+        encode(
+          digest(
+            v_session_token,
+            'sha256'
+          ),
+          'hex'
+        ),
+      updated_at = now()
+    WHERE id = v_participant.id;
+
+  ELSE
+
+    INSERT INTO public.participants (
+      room_id,
+      name,
+      sector,
+      avatar,
+      active,
+      access_code_hash,
+      session_token_hash,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      v_room.id,
+      v_name,
+      v_sector,
+      v_avatar,
+      true,
+      encode(
+        digest(
+          upper(v_access_code),
+          'sha256'
+        ),
+        'hex'
+      ),
+      encode(
+        digest(
+          v_session_token,
+          'sha256'
+        ),
+        'hex'
+      ),
+      now(),
+      now()
+    )
+    RETURNING *
+    INTO v_participant;
+
+  END IF;
+
+  RETURN jsonb_build_object(
+    'participant_id',
+    v_participant.id,
+
+    'name',
+    v_participant.name,
+
+    'sector',
+    v_participant.sector,
+
+    'avatar',
+    v_participant.avatar,
+
+    'room_id',
+    v_room.id,
+
+    'room_code',
+    v_room.room_code,
+
+    'room_name',
+    v_room.room_name,
+
+    'access_token',
+    v_access_code,
+
+    'session_token',
+    v_session_token
+  );
+
+END;
 $$;
 
--- 2) O participante legado sem room_id é associado à sala ativa.
--- Isso evita depender de sipat_settings.event_start_date para participantes que
--- já estão entrando pela sala/QR Code atual.
-create or replace function public.participant_next_question(p_access_code text, p_kind text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  pid uuid;
-  p public.participants;
-  r public.sipat_rooms;
-  q public.questions;
-  event_start date;
-  event_day integer;
-  v_enabled boolean;
-  v_limit integer;
-  v_answered integer;
-begin
-  if p_kind not in ('official','bonus') then raise exception 'Tipo inválido'; end if;
-  pid := public.sipat_resolve_participant(p_access_code);
 
-  select * into p from public.participants where id=pid for update;
+-- =========================================================
+-- PRÓXIMA PERGUNTA
+-- =========================================================
 
-  if p.room_id is null then
-    select * into r from public.sipat_rooms where active=true order by activated_at desc nulls last limit 1;
-    if found then
-      update public.participants set room_id=r.id,last_seen_at=now() where id=pid;
-      p.room_id := r.id;
-    end if;
-  end if;
-
-  if p.room_id is not null then
-    select * into r from public.sipat_rooms where id=p.room_id;
-    if not found then raise exception 'Sala vinculada não encontrada'; end if;
-    event_day := r.day;
-  else
-    select event_start_date into event_start from public.sipat_settings where singleton=true;
-    if event_start is null then
-      raise exception 'Não foi possível identificar o dia da SIPAT. Entre pelo QR Code da sala ativa ou peça ao administrador para ativar uma sala.';
-    end if;
-    event_day := (current_date-event_start)+1;
-  end if;
-
-  if event_day < 1 or event_day > 5 then return jsonb_build_object('status','complete'); end if;
-
-  select enabled,question_limit into v_enabled,v_limit
-  from public.sipat_mode_settings where day=event_day and kind=p_kind;
-  if not found then
-    v_enabled := (p_kind='official');
-    v_limit := case when p_kind='official' then 10 else 5 end;
-  end if;
-  if not v_enabled then
-    return jsonb_build_object('status','disabled','message','Este modo foi desativado pela organização.');
-  end if;
-
-  select count(*) into v_answered
-  from public.attempts a join public.questions qx on qx.id=a.question_id
-  where a.participant_id=pid and qx.day=event_day and qx.kind=p_kind;
-  if v_answered >= v_limit then
-    return jsonb_build_object('status','complete','reason','limit_reached','limit',v_limit);
-  end if;
-
-  select * into q from public.questions
-  where active=true and kind=p_kind and day=event_day
-    and not exists(select 1 from public.attempts a where a.participant_id=pid and a.question_id=questions.id)
-  order by case when p_kind='official' then created_at end asc, random()
-  limit 1;
-
-  if q.id is null then return jsonb_build_object('status','complete','reason','no_active_questions'); end if;
-  return jsonb_build_object('id',q.id,'day',q.day,'kind',q.kind,'prompt',q.prompt,'options',q.options,'points',q.points);
-end;
-$$;
-
-create or replace function public.participant_submit_answer(
-  p_access_code text,p_question_id uuid,p_selected_index smallint
+CREATE OR REPLACE FUNCTION public.participant_next_question(
+  p_access_code text,
+  p_kind text
 )
-returns jsonb
-language plpgsql
-security definer
-set search_path = public, extensions
-as $$
-declare
-  pid uuid;
-  p public.participants;
-  r public.sipat_rooms;
-  q public.questions;
-  event_start date;
-  event_day integer;
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_participant record;
+  v_room record;
+
+  v_event_day integer;
+
   v_enabled boolean;
-  v_limit integer;
+  v_daily_limit integer;
+
   v_answered integer;
-  is_correct boolean;
-  earned integer;
-begin
-  pid := public.sipat_resolve_participant(p_access_code);
-  select * into p from public.participants where id=pid for update;
 
-  if p.room_id is null then
-    select * into r from public.sipat_rooms where active=true order by activated_at desc nulls last limit 1;
-    if found then
-      update public.participants set room_id=r.id,last_seen_at=now() where id=pid;
-      p.room_id := r.id;
-    end if;
-  end if;
+  v_question record;
+BEGIN
 
-  if p.room_id is not null then
-    select * into r from public.sipat_rooms where id=p.room_id;
-    if not found then raise exception 'Sala vinculada não encontrada'; end if;
-    event_day := r.day;
-  else
-    select event_start_date into event_start from public.sipat_settings where singleton=true;
-    if event_start is null then raise exception 'Não foi possível identificar o dia da SIPAT'; end if;
-    event_day := (current_date-event_start)+1;
-  end if;
+  SELECT *
+  INTO v_participant
+  FROM public.participants
+  WHERE active = true
+    AND access_code_hash =
+      encode(
+        digest(
+          upper(trim(p_access_code)),
+          'sha256'
+        ),
+        'hex'
+      )
+  LIMIT 1;
 
-  if event_day < 1 or event_day > 5 then raise exception 'Período da SIPAT encerrado'; end if;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Participante não encontrado.';
+  END IF;
 
-  select * into q from public.questions where id=p_question_id and active=true;
-  if not found then raise exception 'Pergunta indisponível'; end if;
-  if q.day <> event_day then raise exception 'Esta pergunta não pertence ao dia da sua sala'; end if;
-  if q.kind not in ('official','bonus') then raise exception 'Tipo de pergunta inválido'; end if;
+  IF v_participant.room_id IS NULL THEN
 
-  select enabled,question_limit into v_enabled,v_limit
-  from public.sipat_mode_settings where day=event_day and kind=q.kind;
-  if not found then
-    v_enabled := (q.kind='official');
-    v_limit := case when q.kind='official' then 10 else 5 end;
-  end if;
-  if not v_enabled then raise exception 'Este modo foi desativado pela organização'; end if;
+    SELECT *
+    INTO v_room
+    FROM public.sipat_rooms
+    WHERE active = true
+    ORDER BY created_at DESC
+    LIMIT 1;
 
-  select count(*) into v_answered
-  from public.attempts a join public.questions qx on qx.id=a.question_id
-  where a.participant_id=pid and qx.day=event_day and qx.kind=q.kind;
-  if v_answered >= v_limit then raise exception 'Limite de % perguntas atingido para este modo',v_limit; end if;
+    IF FOUND THEN
 
-  if p_selected_index is null or p_selected_index < 0 or p_selected_index >= jsonb_array_length(q.options) then
-    raise exception 'Alternativa inválida';
-  end if;
+      UPDATE public.participants
+      SET
+        room_id = v_room.id,
+        updated_at = now()
+      WHERE id = v_participant.id;
 
-  is_correct := p_selected_index=q.correct_index;
-  earned := case when is_correct then q.points else 0 end;
-  insert into public.attempts(participant_id,question_id,selected_index,correct,points)
-  values(pid,q.id,p_selected_index,is_correct,earned);
-  update public.participants set last_seen_at=now() where id=pid;
-  return jsonb_build_object('correct',is_correct,'points',earned,'limit',v_limit,'answered',v_answered+1);
-exception when unique_violation then
-  raise exception 'Esta pergunta já foi respondida por este participante';
-end;
+      v_participant.room_id =
+        v_room.id;
+
+    END IF;
+
+  END IF;
+
+  SELECT *
+  INTO v_room
+  FROM public.sipat_rooms
+  WHERE id = v_participant.room_id
+    AND active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Sala ativa não encontrada.';
+  END IF;
+
+  v_event_day :=
+    greatest(
+      1,
+      (
+        current_date -
+        coalesce(
+          v_room.event_start_date,
+          (
+            SELECT event_start_date
+            FROM public.sipat_settings
+            LIMIT 1
+          ),
+          current_date
+        )
+      )::integer + 1
+    );
+
+  IF v_event_day < 1
+     OR v_event_day > 5 THEN
+
+    RETURN jsonb_build_object(
+      'available',
+      false,
+      'message',
+      'Não há desafio disponível neste período.'
+    );
+
+  END IF;
+
+  SELECT
+    coalesce(enabled, true),
+    coalesce(daily_limit, 1)
+  INTO
+    v_enabled,
+    v_daily_limit
+  FROM public.sipat_mode_settings
+  WHERE kind = p_kind
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+
+    v_enabled := true;
+    v_daily_limit :=
+      CASE
+        WHEN p_kind = 'bonus'
+          THEN 1
+        ELSE 1
+      END;
+
+  END IF;
+
+  IF NOT v_enabled THEN
+
+    RETURN jsonb_build_object(
+      'available',
+      false,
+      'message',
+      'Este modo está desativado.'
+    );
+
+  END IF;
+
+  SELECT count(*)
+  INTO v_answered
+  FROM public.attempts a
+  INNER JOIN public.questions q
+    ON q.id = a.question_id
+  WHERE a.participant_id =
+        v_participant.id
+    AND q.day = v_event_day
+    AND q.kind = p_kind;
+
+  IF v_answered >= v_daily_limit THEN
+
+    RETURN jsonb_build_object(
+      'available',
+      false,
+      'message',
+      'Você já atingiu o limite deste desafio hoje.'
+    );
+
+  END IF;
+
+  SELECT q.*
+  INTO v_question
+  FROM public.questions q
+  WHERE q.active = true
+    AND q.day = v_event_day
+    AND q.kind = p_kind
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.attempts a
+      WHERE a.participant_id =
+            v_participant.id
+        AND a.question_id =
+            q.id
+    )
+  ORDER BY
+    CASE
+      WHEN p_kind = 'official'
+        THEN q.created_at
+      ELSE NULL
+    END ASC,
+    random()
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+
+    RETURN jsonb_build_object(
+      'available',
+      false,
+      'message',
+      'Não há perguntas disponíveis.'
+    );
+
+  END IF;
+
+  RETURN jsonb_build_object(
+    'available',
+    true,
+    'id',
+    v_question.id,
+    'question_id',
+    v_question.id,
+    'kind',
+    v_question.kind,
+    'day',
+    v_question.day,
+    'points',
+    v_question.points,
+    'question',
+    v_question.question,
+    'options',
+    v_question.options
+  );
+
+END;
 $$;
 
--- 3) Lista administrativa de participantes com total de pontos e respostas.
-create or replace function public.admin_list_participants()
-returns table(
+
+-- =========================================================
+-- RESPONDER PERGUNTA
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION public.participant_submit_answer(
+  p_access_code text,
+  p_question_id uuid,
+  p_selected_index integer
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_participant record;
+  v_room record;
+  v_question record;
+
+  v_event_day integer;
+
+  v_enabled boolean;
+  v_daily_limit integer;
+
+  v_answered integer;
+
+  v_correct boolean;
+  v_points integer;
+BEGIN
+
+  SELECT *
+  INTO v_participant
+  FROM public.participants
+  WHERE active = true
+    AND access_code_hash =
+      encode(
+        digest(
+          upper(trim(p_access_code)),
+          'sha256'
+        ),
+        'hex'
+      )
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Participante não encontrado.';
+  END IF;
+
+  -- Lock do participante.
+  -- Evita duas respostas simultâneas
+  -- para o mesmo perfil.
+  PERFORM 1
+  FROM public.participants
+  WHERE id = v_participant.id
+  FOR UPDATE;
+
+  SELECT *
+  INTO v_room
+  FROM public.sipat_rooms
+  WHERE id = v_participant.room_id
+    AND active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Sala ativa não encontrada.';
+  END IF;
+
+  v_event_day :=
+    greatest(
+      1,
+      (
+        current_date -
+        coalesce(
+          v_room.event_start_date,
+          (
+            SELECT event_start_date
+            FROM public.sipat_settings
+            LIMIT 1
+          ),
+          current_date
+        )
+      )::integer + 1
+    );
+
+  IF v_event_day < 1
+     OR v_event_day > 5 THEN
+
+    RAISE EXCEPTION
+      'Desafio fora do período da SIPAT.';
+
+  END IF;
+
+  SELECT *
+  INTO v_question
+  FROM public.questions
+  WHERE id = p_question_id
+    AND active = true;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Pergunta não encontrada ou inativa.';
+  END IF;
+
+  IF v_question.day <> v_event_day THEN
+    RAISE EXCEPTION
+      'Esta pergunta não está disponível hoje.';
+  END IF;
+
+  SELECT
+    coalesce(enabled, true),
+    coalesce(daily_limit, 1)
+  INTO
+    v_enabled,
+    v_daily_limit
+  FROM public.sipat_mode_settings
+  WHERE kind = v_question.kind
+  LIMIT 1;
+
+  IF NOT FOUND THEN
+    v_enabled := true;
+    v_daily_limit := 1;
+  END IF;
+
+  IF NOT v_enabled THEN
+    RAISE EXCEPTION
+      'Este modo está desativado.';
+  END IF;
+
+  SELECT count(*)
+  INTO v_answered
+  FROM public.attempts a
+  INNER JOIN public.questions q
+    ON q.id = a.question_id
+  WHERE a.participant_id =
+        v_participant.id
+    AND q.day = v_event_day
+    AND q.kind = v_question.kind;
+
+  IF v_answered >= v_daily_limit THEN
+    RAISE EXCEPTION
+      'Você já atingiu o limite deste desafio hoje.';
+  END IF;
+
+  IF p_selected_index IS NULL
+     OR p_selected_index < 0
+     OR p_selected_index >=
+        jsonb_array_length(
+          v_question.options
+        ) THEN
+
+    RAISE EXCEPTION
+      'Alternativa inválida.';
+
+  END IF;
+
+  v_correct :=
+    p_selected_index =
+    v_question.correct_index;
+
+  IF v_correct THEN
+    v_points :=
+      coalesce(
+        v_question.points,
+        0
+      );
+  ELSE
+    v_points := 0;
+  END IF;
+
+  BEGIN
+
+    INSERT INTO public.attempts (
+      participant_id,
+      question_id,
+      selected_index,
+      is_correct,
+      points_awarded,
+      created_at
+    )
+    VALUES (
+      v_participant.id,
+      v_question.id,
+      p_selected_index,
+      v_correct,
+      v_points,
+      now()
+    );
+
+  EXCEPTION
+    WHEN unique_violation THEN
+
+      RETURN jsonb_build_object(
+        'success',
+        false,
+        'duplicate',
+        true,
+        'correct',
+        false,
+        'points',
+        0,
+        'points_awarded',
+        0,
+        'message',
+        'Esta pergunta já foi respondida.'
+      );
+
+  END;
+
+  RETURN jsonb_build_object(
+    'success',
+    true,
+    'duplicate',
+    false,
+    'correct',
+    v_correct,
+    'is_correct',
+    v_correct,
+    'points',
+    v_points,
+    'points_awarded',
+    v_points
+  );
+
+END;
+$$;
+
+
+-- =========================================================
+-- LISTAR PARTICIPANTES — ADMIN
+-- =========================================================
+
+CREATE OR REPLACE FUNCTION public.admin_list_participants()
+RETURNS TABLE (
   participant_id uuid,
   name text,
   sector text,
@@ -270,69 +733,189 @@ returns table(
   points bigint,
   answers bigint
 )
-language plpgsql
-stable
-security definer
-set search_path = public
-as $$
-begin
-  if not public.is_sipat_admin() then raise exception 'Acesso restrito a administradores'; end if;
-  return query
-  select p.id,p.name,p.sector,p.avatar,
-         coalesce(sum(a.points),0)::bigint,
-         count(a.id)::bigint
-  from public.participants p
-  left join public.attempts a on a.participant_id=p.id
-  where p.active=true
-  group by p.id
-  order by coalesce(sum(a.points),0) desc,p.name;
-end;
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+
+  IF NOT public.is_sipat_admin() THEN
+    RAISE EXCEPTION
+      'Acesso negado.';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    p.id AS participant_id,
+    p.name,
+    p.sector,
+    p.avatar,
+
+    coalesce(
+      sum(
+        CASE
+          WHEN a.is_correct
+            THEN a.points_awarded
+          ELSE 0
+        END
+      ),
+      0
+    )::bigint AS points,
+
+    count(a.id)::bigint AS answers
+
+  FROM public.participants p
+
+  LEFT JOIN public.attempts a
+    ON a.participant_id = p.id
+
+  WHERE p.active = true
+
+  GROUP BY
+    p.id,
+    p.name,
+    p.sector,
+    p.avatar
+
+  ORDER BY
+    points DESC,
+    p.name ASC;
+
+END;
 $$;
 
--- 4) Exclui um participante e somente as tentativas/pontos ligados a ele.
-create or replace function public.admin_delete_participant(p_participant_id uuid)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  deleted_name text;
-  deleted_count integer;
-begin
-  if not public.is_sipat_admin() then raise exception 'Acesso restrito a administradores'; end if;
-  if p_participant_id is null then raise exception 'Participante inválido'; end if;
 
-  select name into deleted_name
-  from public.participants
-  where id=p_participant_id
-  for update;
+-- =========================================================
+-- EXCLUIR PARTICIPANTE — ADMIN
+-- =========================================================
 
-  if not found then raise exception 'Participante não encontrado'; end if;
+CREATE OR REPLACE FUNCTION public.admin_delete_participant(
+  p_participant_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_participant record;
+BEGIN
 
-  delete from public.attempts where participant_id=p_participant_id;
-  get diagnostics deleted_count = row_count;
+  IF NOT public.is_sipat_admin() THEN
+    RAISE EXCEPTION
+      'Acesso negado.';
+  END IF;
 
-  delete from public.participants where id=p_participant_id;
+  SELECT *
+  INTO v_participant
+  FROM public.participants
+  WHERE id = p_participant_id
+  FOR UPDATE;
 
-  return jsonb_build_object(
-    'success',true,'name',deleted_name,
-    'deleted_attempts',deleted_count
+  IF NOT FOUND THEN
+    RAISE EXCEPTION
+      'Participante não encontrado.';
+  END IF;
+
+  DELETE FROM public.attempts
+  WHERE participant_id =
+        p_participant_id;
+
+  DELETE FROM public.participants
+  WHERE id =
+        p_participant_id;
+
+  RETURN jsonb_build_object(
+    'success',
+    true,
+    'participant_id',
+    p_participant_id,
+    'name',
+    v_participant.name
   );
-end;
+
+END;
 $$;
 
-revoke all on function public.participant_join_room(text,text,text,text) from public;
-revoke all on function public.admin_list_participants() from public,anon;
-revoke all on function public.admin_delete_participant(uuid) from public,anon;
-revoke all on function public.participant_next_question(text,text) from public;
-revoke all on function public.participant_submit_answer(text,uuid,smallint) from public;
 
-grant execute on function public.participant_join_room(text,text,text,text) to anon,authenticated;
-grant execute on function public.admin_list_participants() to authenticated;
-grant execute on function public.admin_delete_participant(uuid) to authenticated;
-grant execute on function public.participant_next_question(text,text) to anon,authenticated;
-grant execute on function public.participant_submit_answer(text,uuid,smallint) to anon,authenticated;
+-- =========================================================
+-- PERMISSÕES
+-- =========================================================
 
-notify pgrst, 'reload schema';
-commit;
+REVOKE ALL
+ON FUNCTION public.participant_join_room(
+  text,
+  text,
+  text,
+  text
+)
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION public.participant_join_room(
+  text,
+  text,
+  text,
+  text
+)
+TO anon, authenticated;
+
+
+REVOKE ALL
+ON FUNCTION public.participant_next_question(
+  text,
+  text
+)
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION public.participant_next_question(
+  text,
+  text
+)
+TO anon, authenticated;
+
+
+REVOKE ALL
+ON FUNCTION public.participant_submit_answer(
+  text,
+  uuid,
+  integer
+)
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION public.participant_submit_answer(
+  text,
+  uuid,
+  integer
+)
+TO anon, authenticated;
+
+
+REVOKE ALL
+ON FUNCTION public.admin_list_participants()
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION public.admin_list_participants()
+TO authenticated;
+
+
+REVOKE ALL
+ON FUNCTION public.admin_delete_participant(uuid)
+FROM PUBLIC;
+
+GRANT EXECUTE
+ON FUNCTION public.admin_delete_participant(uuid)
+TO authenticated;
+
+
+-- =========================================================
+-- RECARREGAR CACHE DO POSTGREST
+-- =========================================================
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
